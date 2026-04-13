@@ -5,6 +5,7 @@ import 'package:habit_builder/features/chat/chat_page.dart';
 import 'package:habit_builder/features/home/home_page.dart';
 import 'package:habit_builder/features/newHabit/new_habit.dart';
 import 'package:habit_builder/features/stats/stat_screen.dart';
+import 'package:habit_builder/features/profile/profile_page.dart';
 
 // ─────────────────────────────────────────────
 // DATA MODEL: NavItem
@@ -159,11 +160,12 @@ class _AppShellState extends State<AppShell> {
 
   // Maps nav index → IndexedStack index
   // Add tab (2) is a modal — never stored in stack
-  // Stack layout: 0=Today, 1=Stats, 2=AI
+  // Stack layout: 0=Today, 1=Stats, 2=AI, 3=Profile
   int get _stackIndex {
     if (_currentIndex == 0) return 0;
     if (_currentIndex == 1) return 1;
     if (_currentIndex == 3) return 2;
+    if (_currentIndex == 4) return 3;
     return 0; // fallback
   }
 
@@ -190,6 +192,11 @@ class _AppShellState extends State<AppShell> {
         icon: Icons.smart_toy_outlined,
         label: 'AI',
         page: AiCoachPage(),
+      ),
+      const NavItem(
+        icon: Icons.person_outline,
+        label: 'Profile',
+        page: ProfilePage(),
       ),
     ];
   }
@@ -232,6 +239,7 @@ class _AppShellState extends State<AppShell> {
           _navItems[0].page, // Today  → stack index 0
           _navItems[1].page, // Stats  → stack index 1
           _navItems[3].page, // AI     → stack index 2
+          _navItems[4].page, // Profile→ stack index 3
         ],
       ),
       bottomNavigationBar: MainNavBar(

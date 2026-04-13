@@ -1,122 +1,149 @@
 import 'package:flutter/material.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
+import 'package:habit_builder/core/data/in_memory_store.dart';
 
-// ─────────────────────────────────────────────
-// DATA MODEL
-// ─────────────────────────────────────────────
+class StatScreen extends StatefulWidget {
+  const StatScreen({super.key});
 
-class HabitDetailData {
-  final String habitName;
-  final int currentStreak;
-  final String streakInsight;
-  final double consistencyPercent;
-  final String consistencyLabel;
-  final int totalSessions;
-  final String sessionsLabel;
-  final String chartTitle;
-  final String chartChangeText;
-  final List<BarChartEntry> chartData;
-  final String aiInsight;
-
-  const HabitDetailData({
-    required this.habitName,
-    required this.currentStreak,
-    required this.streakInsight,
-    required this.consistencyPercent,
-    required this.consistencyLabel,
-    required this.totalSessions,
-    required this.sessionsLabel,
-    required this.chartTitle,
-    required this.chartChangeText,
-    required this.chartData,
-    required this.aiInsight,
-  });
+  @override
+  State<StatScreen> createState() => _StatScreenState();
 }
 
-class BarChartEntry {
-  final String label;
-  final double value; // 0.0 to 1.0 normalized
+class _StatScreenState extends State<StatScreen> {
+  @override
+  void initState() {
+    super.initState();
+    InMemoryStore().addListener(_update);
+  }
 
-  const BarChartEntry({required this.label, required this.value});
-}
+  @override
+  void dispose() {
+    InMemoryStore().removeListener(_update);
+    super.dispose();
+  }
 
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: DetailAppBar
-// ─────────────────────────────────────────────
-
-class DetailAppBar extends StatelessWidget {
-  final String habitName;
-  final VoidCallback? onSettingsTap;
-
-  const DetailAppBar({
-    super.key,
-    required this.habitName,
-    this.onSettingsTap,
-  });
+  void _update() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppColors color = AppColors();
+    final store = InMemoryStore();
+    final habits = store.allHabits;
+
+    final double completionRate = habits.isEmpty
+        ? 0
+        : (habits.where((h) => h.isCompleted).length / habits.length) * 100;
+    final int totalSessions = habits.fold(
+      0,
+      (sum, h) => sum + h.completedTimes,
+    );
+
+    return Scaffold(
+      backgroundColor: color.backgroundColor,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: ListView(
+            children: [
+              const SizedBox(height: 14),
+              _DetailAppBar(title: 'Overall Stats'),
+              const SizedBox(height: 14),
+              _StreakHeroCard(
+                streakDays: 0, // TODO: Implement real streak
+                insight: habits.isEmpty
+                    ? "Add your first habit to start tracking!"
+                    : "You're consistently tracking ${habits.length} habits.",
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _StatMiniCard(
+                    icon: Icons.calendar_month_outlined,
+                    label: 'Consistency',
+                    value: '${completionRate.toInt()}%',
+                    sublabel: 'Completion rate today',
+                  ),
+                  const SizedBox(width: 12),
+                  _StatMiniCard(
+                    icon: Icons.check_circle_outline,
+                    label: 'Sessions',
+                    value: '$totalSessions',
+                    sublabel: 'Total completions logged',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _WeekBarChart(
+                title: 'Activity Level',
+                subtitle: 'Total completions per day',
+                data: List.generate(7, (index) {
+                  int totalForDay = 0;
+                  for (var h in habits) {
+                    final hist = [...h.pastDaysCompletion, h.completedTimes];
+                    totalForDay += hist[index];
+                  }
+                  double normalized = habits.isEmpty
+                      ? 0
+                      : totalForDay / (habits.length * 5); // arbitrary max
+                  return _BarChartEntry(
+                    label: [
+                      'Mon',
+                      'Tue',
+                      'Wed',
+                      'Thu',
+                      'Fri',
+                      'Sat',
+                      'Sun',
+                    ][index],
+                    value: normalized.clamp(0.0, 1.0),
+                  );
+                }),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailAppBar extends StatelessWidget {
+  final String title;
+  const _DetailAppBar({required this.title});
+  @override
+  Widget build(BuildContext context) {
+    final color = AppColors();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: color.cardColor,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color.backgroundColor,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.person_outline,
-                color: color.primaryTextColor, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              habitName,
-              style: TextStyle(
-                color: color.primaryTextColor,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: onSettingsTap,
-            child: Icon(Icons.settings_outlined,
-                color: color.subtitleColor, size: 20),
-          ),
-        ],
+      child: Text(
+        title,
+        style: TextStyle(
+          color: color.primaryTextColor,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: StreakHeroCard
-// ─────────────────────────────────────────────
-
-class StreakHeroCard extends StatelessWidget {
+class _StreakHeroCard extends StatelessWidget {
   final int streakDays;
   final String insight;
-
-  const StreakHeroCard({
-    super.key,
-    required this.streakDays,
-    required this.insight,
-  });
-
+  const _StreakHeroCard({required this.streakDays, required this.insight});
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
+    final color = AppColors();
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: color.cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -133,44 +160,12 @@ class StreakHeroCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Medal icon
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: color.borderColor, width: 2),
-                ),
-                child: Icon(Icons.workspace_premium_outlined,
-                    color: color.subtitleColor, size: 28),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: '$streakDays',
-                  style: TextStyle(
-                    color: color.primaryTextColor,
-                    fontSize: 56,
-                    fontWeight: FontWeight.w800,
-                    height: 1.0,
-                  ),
-                ),
-                TextSpan(
-                  text: ' days',
-                  style: TextStyle(
-                    color: color.primaryTextColor,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+          Text(
+            '$streakDays days',
+            style: TextStyle(
+              color: color.primaryTextColor,
+              fontSize: 40,
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 14),
@@ -189,27 +184,20 @@ class StreakHeroCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: StatMiniCard
-// ─────────────────────────────────────────────
-
-class StatMiniCard extends StatelessWidget {
+class _StatMiniCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final String sublabel;
-
-  const StatMiniCard({
-    super.key,
+  const _StatMiniCard({
     required this.icon,
     required this.label,
     required this.value,
     required this.sublabel,
   });
-
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
+    final color = AppColors();
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -230,23 +218,17 @@ class StatMiniCard extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 2),
             Text(
               value,
               style: TextStyle(
                 color: color.primaryTextColor,
-                fontSize: 30,
+                fontSize: 24,
                 fontWeight: FontWeight.w800,
-                height: 1.1,
               ),
             ),
-            const SizedBox(height: 4),
             Text(
               sublabel,
-              style: TextStyle(
-                color: color.subtitleColor,
-                fontSize: 11,
-              ),
+              style: TextStyle(color: color.subtitleColor, fontSize: 10),
             ),
           ],
         ),
@@ -255,27 +237,24 @@ class StatMiniCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: WeekBarChart
-// ─────────────────────────────────────────────
+class _BarChartEntry {
+  final String label;
+  final double value;
+  const _BarChartEntry({required this.label, required this.value});
+}
 
-class WeekBarChart extends StatelessWidget {
+class _WeekBarChart extends StatelessWidget {
   final String title;
   final String subtitle;
-  final String changeText;
-  final List<BarChartEntry> data;
-
-  const WeekBarChart({
-    super.key,
+  final List<_BarChartEntry> data;
+  const _WeekBarChart({
     required this.title,
     required this.subtitle,
-    required this.changeText,
     required this.data,
   });
-
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
+    final color = AppColors();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -285,386 +264,57 @@ class WeekBarChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: color.primaryTextColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: color.subtitleColor,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                changeText,
-                style: TextStyle(
-                  // color: color.,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          Text(
+            title,
+            style: TextStyle(
+              color: color.primaryTextColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(color: color.subtitleColor, fontSize: 11),
           ),
           const SizedBox(height: 20),
-          // Bars
           SizedBox(
-            height: 72,
+            height: 80,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: data.map((entry) {
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Flexible(
-                          child: FractionallySizedBox(
-                            heightFactor: entry.value.clamp(0.08, 1.0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: entry.value > 0.6
-                                    ? color.accentColor
-                                    : color.borderColor,
-                                borderRadius: BorderRadius.circular(4),
+              children: data
+                  .map(
+                    (e) => Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Flexible(
+                            child: FractionallySizedBox(
+                              heightFactor: e.value.clamp(0.1, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: e.value > 0.5
+                                      ? color.accentColor
+                                      : color.borderColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          entry.label,
-                          style: TextStyle(
-                            color: color.subtitleColor,
-                            fontSize: 10,
+                          const SizedBox(height: 4),
+                          Text(
+                            e.label,
+                            style: TextStyle(
+                              color: color.subtitleColor,
+                              fontSize: 10,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: AiInsightCard
-// ─────────────────────────────────────────────
-
-class AiInsightCard extends StatelessWidget {
-  final String insight;
-
-  const AiInsightCard({super.key, required this.insight});
-
-  @override
-  Widget build(BuildContext context) {
-    final AppColors color = AppColors();
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.cardColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, color: color.subtitleColor, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                'AI INSIGHT',
-                style: TextStyle(
-                  color: color.subtitleColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '"$insight"',
-            style: TextStyle(
-              color: color.primaryTextColor,
-              fontSize: 13.5,
-              fontStyle: FontStyle.italic,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: PrimaryActionButton
-// ─────────────────────────────────────────────
-
-class PrimaryActionButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onTap;
-  final bool isOutlined;
-
-  const PrimaryActionButton({
-    super.key,
-    required this.label,
-    this.onTap,
-    this.isOutlined = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final AppColors color = AppColors();
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 54,
-        decoration: BoxDecoration(
-          color: isOutlined ? Colors.transparent : color.primaryTextColor,
-          borderRadius: BorderRadius.circular(30),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isOutlined ? color.primaryTextColor : color.backgroundColor,
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: BottomNavBar
-// ─────────────────────────────────────────────
-
-class HabitBottomNavBar extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int>? onTap;
-
-  const HabitBottomNavBar({
-    super.key,
-    this.selectedIndex = 0,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final AppColors color = AppColors();
-    final items = [
-      (Icons.today_outlined, 'Today'),
-      (Icons.bar_chart_outlined, 'Stats'),
-      (Icons.add_circle_outline, 'Add'),
-      (Icons.auto_awesome_outlined, 'AI'),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: color.cardColor,
-        border: Border(top: BorderSide(color: color.borderColor, width: 1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (i) {
-          final isSelected = i == selectedIndex;
-          return GestureDetector(
-            onTap: () => onTap?.call(i),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  items[i].$1,
-                  color: isSelected
-                      ? color.primaryTextColor
-                      : color.subtitleColor,
-                  size: 22,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  items[i].$2,
-                  style: TextStyle(
-                    color: isSelected
-                        ? color.primaryTextColor
-                        : color.subtitleColor,
-                    fontSize: 10,
-                    fontWeight: isSelected
-                        ? FontWeight.w700
-                        : FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// MAIN PAGE: HabitDetailPage
-// ─────────────────────────────────────────────
-
-class StatScreen extends StatefulWidget {
-  const StatScreen({super.key});
-
-  @override
-  State<StatScreen> createState() => _StatScreenState();
-}
-
-class _StatScreenState extends State<StatScreen> {
-  int _navIndex = 0;
-
-  final HabitDetailData _data = const HabitDetailData(
-    habitName: 'Deep Work',
-    currentStreak: 24,
-    streakInsight:
-        "You're in the top 5% of users maintaining\na deep work habit this month.",
-    consistencyPercent: 92,
-    consistencyLabel: 'Completion rate this month',
-    totalSessions: 148,
-    sessionsLabel: 'Total focus hours logged',
-    chartTitle: 'Last 7 Days',
-    chartChangeText: '+12%',
-    chartData: [
-      BarChartEntry(label: 'Mon', value: 0.55),
-      BarChartEntry(label: 'Tue', value: 0.40),
-      BarChartEntry(label: 'Wed', value: 0.70),
-      BarChartEntry(label: 'Thu', value: 0.85),
-      BarChartEntry(label: 'Fri', value: 0.65),
-      BarChartEntry(label: 'Sat', value: 0.30),
-      BarChartEntry(label: 'Sun', value: 0.90),
-    ],
-    aiInsight:
-        'Your focus peaks between 9:00 AM and 11:30 AM. You are 40% more '
-        'likely to complete this habit if started before noon. Consider moving '
-        'your \'Deep Work\' block earlier on Tuesdays to maintain your streak.',
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final AppColors color = AppColors();
-
-    return Scaffold(
-      backgroundColor: color.backgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Scrollable Content ──
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ListView(
-                  children: [
-                    const SizedBox(height: 14),
-
-                    // App Bar
-                    DetailAppBar(habitName: _data.habitName),
-
-                    const SizedBox(height: 14),
-
-                    // Streak Hero
-                    StreakHeroCard(
-                      streakDays: _data.currentStreak,
-                      insight: _data.streakInsight,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Stats Row
-                    Row(
-                      children: [
-                        StatMiniCard(
-                          icon: Icons.calendar_month_outlined,
-                          label: 'Consistency',
-                          value: '${_data.consistencyPercent.toInt()}%',
-                          sublabel: _data.consistencyLabel,
-                        ),
-                        const SizedBox(width: 12),
-                        StatMiniCard(
-                          icon: Icons.timer_outlined,
-                          label: 'Sessions',
-                          value: '${_data.totalSessions}',
-                          sublabel: _data.sessionsLabel,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Bar Chart
-                    WeekBarChart(
-                      title: _data.chartTitle,
-                      subtitle: 'Focus duration (minutes)',
-                      changeText: _data.chartChangeText,
-                      data: _data.chartData,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // AI Insight
-                    AiInsightCard(insight: _data.aiInsight),
-
-                    const SizedBox(height: 20),
-
-                    // Complete for Today
-                    PrimaryActionButton(
-                      label: 'Complete for Today',
-                      onTap: () {},
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Edit Habit (text button)
-                    GestureDetector(
-                      onTap: () {},
-                      child: Center(
-                        child: Text(
-                          'Edit Habit',
-                          style: TextStyle(
-                            color: color.primaryTextColor,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        ],
                       ),
                     ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
+                  )
+                  .toList(),
             ),
-
-            // ── Bottom Nav ──
-           
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

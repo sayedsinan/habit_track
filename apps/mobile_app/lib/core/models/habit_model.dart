@@ -21,16 +21,6 @@ class Habit {
 
   factory Habit.fromJson(Map<String, dynamic> json) {
     final int totalTimes = (json['total_times'] as int?) ?? 1;
-    // Generate a beautiful fake past week for AI responses so the UI looks active
-    final List<int> dummyHistory = [
-      totalTimes,
-      0,
-      totalTimes > 1 ? 1 : totalTimes,
-      totalTimes,
-      0,
-      totalTimes > 2 ? 2 : (totalTimes > 1 ? 1 : totalTimes),
-    ];
-
     List<int> parsedPastDays;
     if (json['past_days'] != null) {
       parsedPastDays = (json['past_days'] as List).map<int>((e) {
@@ -39,7 +29,7 @@ class Habit {
         return 0;
       }).toList();
     } else {
-      parsedPastDays = dummyHistory;
+      parsedPastDays = List.filled(6, 0);
     }
 
     return Habit(

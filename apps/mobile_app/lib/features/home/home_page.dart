@@ -581,7 +581,13 @@ class HomePage extends StatelessWidget {
                       .slideY(begin: -0.2, end: 0),
 
                   const SizedBox(height: 20),
-
+                  
+                  if (store.isLoading)
+                    const Padding(
+                       padding: EdgeInsets.only(top: 100.0),
+                       child: Center(child: CircularProgressIndicator()),
+                    )
+                  else ...[
                   // ── Stat Cards Row ──
                   Row(
                         children: [
@@ -592,7 +598,7 @@ class HomePage extends StatelessWidget {
                           const SizedBox(width: 12),
                           StatCard(
                             label: 'DAILY STREAK',
-                            value: '14',
+                            value: '0',
                             trailing: Icon(
                               Icons.bedtime,
                               color: color.accentColor,
@@ -656,6 +662,7 @@ class HomePage extends StatelessWidget {
                         .scaleXY(begin: 0.95, end: 1.0),
 
                   const SizedBox(height: 24),
+                  ],
                 ],
               ),
             );

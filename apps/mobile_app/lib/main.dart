@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
-import 'package:habit_builder/features/onboarding/onboarding_page.dart';
+import 'package:habit_builder/features/auth/auth_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0xFF1E2229),
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF1E2229),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const HabitBuilderApp());
 }
 
@@ -35,7 +37,7 @@ class HabitBuilderApp extends StatelessWidget {
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
       ),
-      home: const OnboardingPage(),
+      home: const AuthPage(),
     );
   }
-}
+}

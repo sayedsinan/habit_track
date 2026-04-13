@@ -15,7 +15,7 @@ class OnboardingPage extends StatefulWidget {
 
 class _OnboardingPageState extends State<OnboardingPage> {
   final TextEditingController _promptController = TextEditingController();
-  final AiMockService _aiService = AiMockService();
+  final AiService _aiService = AiService();
   bool _isLoading = false;
 
   void _generateHabits() async {
@@ -28,20 +28,34 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
     HapticFeedback.mediumImpact();
 
-    final response = await _aiService.generateHabits(prompt);
-    InMemoryStore().loadAiResponse(response);
+    try {
+      final response = await _aiService.generateHabits(prompt);
+      InMemoryStore().loadAiResponse(response);
 
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const AppShell(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const AppShell(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AI Error: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
