@@ -7,11 +7,11 @@ export class AuthController {
 
   @Post('register')
   async register(@Body() body: any) {
-    const { email, password } = body;
+    const { email, password, firstName, lastName } = body;
     if (!email || !password) {
       throw new BadRequestException('Email and password required');
     }
-    return this.authService.register(email, password);
+    return this.authService.register(email, password, firstName, lastName);
   }
 
   @Post('login')

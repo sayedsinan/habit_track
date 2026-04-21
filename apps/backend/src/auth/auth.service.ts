@@ -26,13 +26,13 @@ export class AuthService {
     };
   }
 
-  async register(email: string, pass: string) {
+  async register(email: string, pass: string, firstName?: string, lastName?: string) {
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
       throw new BadRequestException('User already exists');
     }
     const hash = await bcrypt.hash(pass, 10);
-    const user = await this.usersService.create(email, hash);
+    const user = await this.usersService.create(email, hash, firstName, lastName);
     return this.login(user); // auto-login after register
   }
 }

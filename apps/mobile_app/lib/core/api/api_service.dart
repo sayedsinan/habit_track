@@ -5,11 +5,12 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String _liveUrl = 'https://your-production-url.com'; // TODO: Update later
+  static const String _liveUrl =
+      'https://habit-track-delta-three.vercel.app'; // TODO: Update later
 
   static String get baseUrl {
     if (kReleaseMode) return _liveUrl;
-    
+
     // In debug mode, use the appropriate local address
     if (!kIsWeb && Platform.isAndroid) {
       return 'http://10.0.2.2:3000'; // Android emulator access
@@ -62,12 +63,19 @@ class ApiService {
 
   static Future<Map<String, dynamic>> register(
     String email,
-    String password,
-  ) async {
+    String password, {
+    String? firstName,
+    String? lastName,
+  }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'firstName': firstName,
+        'lastName': lastName,
+      }),
     );
     if (res.statusCode == 201) {
       final data = jsonDecode(res.body);
@@ -143,7 +151,10 @@ class ApiService {
   }
 
   // Goals API
-  static Future<Map<String, dynamic>> evaluateGoal(String prompt, {int? durationDays}) async {
+  static Future<Map<String, dynamic>> evaluateGoal(
+    String prompt, {
+    int? durationDays,
+  }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/goals/evaluate'),
       headers: _headers,
@@ -238,7 +249,9 @@ class ApiService {
     throw Exception('Failed to fetch profile');
   }
 
-  static Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> data,
+  ) async {
     final res = await http.patch(
       Uri.parse('$baseUrl/users/me'),
       headers: _headers,

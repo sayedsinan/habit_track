@@ -17,6 +17,8 @@ class AuthPage extends StatefulWidget {
 class _AuthPageState extends State<AuthPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
 
   bool _isLogin = true;
   bool _isLoading = false;
@@ -24,8 +26,11 @@ class _AuthPageState extends State<AuthPage> {
   Future<void> _submit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
 
     if (email.isEmpty || password.isEmpty) return;
+    if (!_isLogin && (firstName.isEmpty || lastName.isEmpty)) return;
 
     setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
@@ -45,7 +50,12 @@ class _AuthPageState extends State<AuthPage> {
           );
         }
       } else {
-        await ApiService.register(email, password);
+        await ApiService.register(
+          email,
+          password,
+          firstName: firstName,
+          lastName: lastName,
+        );
         await AppDataStore().refreshData();
         if (mounted) {
           Navigator.of(context).pushReplacement(
@@ -143,6 +153,21 @@ class _AuthPageState extends State<AuthPage> {
                   const SizedBox(height: 60),
 
                   // Input Fields
+                  if (!_isLogin) ...[
+                    _buildInputField(
+                      controller: _firstNameController,
+                      hint: "First name",
+                      icon: Icons.person_outline_rounded,
+                    ).animate().fade(delay: 500.ms).slideX(begin: 0.1),
+                    const SizedBox(height: 20),
+                    _buildInputField(
+                      controller: _lastNameController,
+                      hint: "Last name",
+                      icon: Icons.person_outline_rounded,
+                    ).animate().fade(delay: 550.ms).slideX(begin: 0.1),
+                    const SizedBox(height: 20),
+                  ],
+
                   _buildInputField(
                     controller: _emailController,
                     hint: "Email address",
