@@ -9,7 +9,7 @@ export class AiController {
 
   @Post('chat')
   async chat(@Body('message') message: string) {
-    const response = await this.aiService.generateChatResponse(message);
+    const response = await this.aiService.generateChat(message);
     return { success: true, aiResponse: response };
   }
 }

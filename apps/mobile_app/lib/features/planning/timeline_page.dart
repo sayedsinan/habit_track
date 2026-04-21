@@ -1,0 +1,399 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:habit_builder/data/app_data_store.dart';
+import 'package:habit_builder/core/models/goal_model.dart';
+import 'package:habit_builder/core/theme/app_colors.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+
+class TimelinePage extends StatelessWidget {
+  const TimelinePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Roadmap'), centerTitle: true),
+      body: ListenableBuilder(
+        listenable: AppDataStore(),
+        builder: (context, child) {
+          final store = AppDataStore();
+          final goal = store.activeGoal;
+
+          if (goal == null) {
+            return Center(
+              child: Text(
+                "No active timeline. Start a mission first.",
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: store.refreshData,
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // Progress Stats
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildMiniStat(
+                          context,
+                          "PHASES",
+                          goal.milestones.length.toString(),
+                        ),
+                        _buildMiniStat(
+                          context,
+                          "PROGRESS",
+                          "${(store.goalProgress * 100).toInt()}%",
+                        ),
+                        _buildMiniStat(
+                          context,
+                          "STATUS",
+                          goal.status.toUpperCase(),
+                        ),
+                      ],
+                    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
+                  ),
+                ),
+
+                // Timeline List
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final milestone = goal.milestones[index];
+                      // Find if this is the currently active milestone
+                      final bool isCurrent = !milestone.isCompleted && 
+                          (index == 0 || goal.milestones[index - 1].isCompleted);
+                      
+                      return _buildAdvancedTimelineItem(
+                        context,
+                        milestone,
+                        index == goal.milestones.length - 1,
+                        isCurrent,
+                      );
+                    }, childCount: goal.milestones.length),
+                  ),
+                ),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdvancedTimelineItem(
+    BuildContext context,
+    Milestone milestone,
+    bool isLast,
+    bool isCurrent,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final dateStr = milestone.targetDate != null
+        ? "${milestone.targetDate!.day}/${milestone.targetDate!.month}"
+        : "PHASE ${milestone.order}";
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left side: Indicator with line
+          Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isCurrent
+                      ? theme.colorScheme.primary
+                      : (milestone.isCompleted
+                            ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                            : Colors.transparent),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isCurrent
+                        ? theme.colorScheme.primary
+                        : (isDark
+                              ? AppColors.darkBorder
+                              : AppColors.lightBorder),
+                    width: 2,
+                  ),
+                ),
+                child: milestone.isCompleted
+                    ? Icon(
+                        LucideIcons.check,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      )
+                    : Center(
+                        child: Text(
+                          milestone.order.toString(),
+                          style: TextStyle(
+                            color: isCurrent
+                                ? Colors.white
+                                : theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.3,
+                                  ),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: milestone.isCompleted
+                        ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                        : (isDark
+                              ? AppColors.darkBorder
+                              : AppColors.lightBorder),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 20),
+          // Right side: Content card
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        dateStr.toUpperCase(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: isCurrent
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.3,
+                                ),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      if (isCurrent) _buildCurrentBadge(context),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    milestone.title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      decoration: milestone.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
+                      color: milestone.isCompleted
+                          ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    milestone.description,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Phase Action Items Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.cardTheme.color,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.darkBorder
+                            : AppColors.lightBorder,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: milestone.actionItems
+                          .map((action) => _buildActionMiniRow(context, action))
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms).slideX(begin: 0.05);
+  }
+
+  Widget _buildCurrentBadge(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        "ACTIVE",
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionMiniRow(BuildContext context, ActionItem action) {
+    final theme = Theme.of(context);
+    final hasSteps = action.steps.isNotEmpty;
+    final allStepsDone = !hasSteps || action.steps.every((s) => s.isCompleted);
+
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: PageStorageKey(action.id), // Preserve expansion state
+        tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(36, 0, 4, 8),
+        iconColor: theme.colorScheme.primary,
+        collapsedIconColor: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+        enabled: hasSteps,
+        trailing: hasSteps ? null : const SizedBox.shrink(),
+        title: Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (!allStepsDone && !action.isCompleted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Complete all blueprint steps first"),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                  return;
+                }
+                AppDataStore().toggleActionItem(action.id, action.isCompleted);
+              },
+              child: Icon(
+                action.isCompleted ? LucideIcons.checkCircle2 : LucideIcons.circle,
+                size: 18,
+                color: !allStepsDone && !action.isCompleted
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
+                    : (action.isCompleted
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                action.title,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: action.isCompleted
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                      : null,
+                  decoration: action.isCompleted ? TextDecoration.lineThrough : null,
+                ),
+              ),
+            ),
+            if (action.type == 'habit')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  "${action.completedCount}/${action.totalTarget}",
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 9,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        children: action.steps.map((step) => _buildStepRow(context, action, step)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildStepRow(BuildContext context, ActionItem action, TaskStep step) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => AppDataStore().toggleTaskStep(action.id, step.id, step.isCompleted),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              step.isCompleted ? LucideIcons.checkCircle2 : LucideIcons.circle,
+              size: 14,
+              color: step.isCompleted
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                step.text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  color: step.isCompleted
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  decoration: step.isCompleted ? TextDecoration.lineThrough : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

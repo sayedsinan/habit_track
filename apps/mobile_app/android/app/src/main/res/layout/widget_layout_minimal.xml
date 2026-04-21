@@ -30,6 +30,19 @@
             android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold" />
+            
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/widget_progress_bar"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="8dp"
+            android:text="Next Task"
+            android:textColor="#BBBBBB"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
     </RelativeLayout>
 
 </RelativeLayout>

@@ -1,21 +1,30 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Backgrounds
-  final Color backgroundColor = const Color(0xFF1A1D23);
-  final Color cardColor       = const Color(0xFF22262F);
-  final Color tipIconBg       = const Color(0xFF2A2F3A);
-  final Color navBarColor     = const Color(0xFF1E2229);
+  // --- Light Mode Palette ---
+  static const Color lightBg          = Color(0xFFFDFBF7);
+  static const Color lightSurface     = Color(0xFFF3F2EF);
+  static const Color lightTextPrimary = Color(0xFF1F1E1C);
+  static const Color lightTextSecondary = Color(0xFF696763);
+  static const Color lightBorder      = Color(0xFFE6E4DF);
+  static const Color lightAccent      = Color(0xFFDA7756); // Terracotta
+  static const Color lightSecondary   = Color(0xFF3A6962); // Sage
+  static const Color lightError       = Color(0xFFB73D35);
 
-  // Text
-  final Color primaryTextColor = const Color(0xFFEEEFF2);
-  final Color subtitleColor    = const Color(0xFF7A8099);
+  // --- Dark Mode Palette ---
+  static const Color darkBg           = Color(0xFF1F1E1C);
+  static const Color darkSurface      = Color(0xFF2D2C2A);
+  static const Color darkTextPrimary  = Color(0xFFF3F2EF);
+  static const Color darkTextSecondary = Color(0xFFA3A19D);
+  static const Color darkBorder       = Color(0xFF3C3B39);
+  static const Color darkAccent       = Color(0xFFE28A6F); // Brightened Terracotta
+  static const Color darkSecondary    = Color(0xFF588B83); // Lightened Sage
+  static const Color darkError        = Color(0xFFD45B53);
 
-  // Accent
-  final Color accentColor   = const Color(0xFF5B7FFF);
-  final Color positiveColor = const Color(0xFF4CAF82);
+  // Status Colors (Common)
+  static const Color success          = Color(0xFF10B981);
+  static const Color warning          = Color(0xFFF59E0B);
 
-  // Borders & dots
-  final Color borderColor      = const Color(0xFF3A3F50);
-  final Color dotInactiveColor = const Color(0xFF3A3F50);
-}
+  // Helper getters for current theme (defaulting to dark as requested previously or based on app state)
+  // However, it's better to use Theme.of(context) in widgets.
+}

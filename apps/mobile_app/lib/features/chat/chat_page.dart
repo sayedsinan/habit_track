@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
 import 'package:habit_builder/core/api/api_service.dart';
 
@@ -9,11 +10,7 @@ class ChatMessage {
   final MessageSender sender;
   final String? time;
 
-  const ChatMessage({
-    required this.text,
-    required this.sender,
-    this.time,
-  });
+  const ChatMessage({required this.text, required this.sender, this.time});
 }
 
 class AiCoachPage extends StatefulWidget {
@@ -29,7 +26,8 @@ class _AiCoachPageState extends State<AiCoachPage> {
   final List<ChatMessage> _messages = [
     const ChatMessage(
       sender: MessageSender.ai,
-      text: 'Hello! I am your Silent Architect. How can I help you with your habits today?',
+      text:
+          'Hello! I am your Mission Coach. How can I help you with your goals today?',
     ),
   ];
   bool _isLoading = false;
@@ -39,31 +37,36 @@ class _AiCoachPageState extends State<AiCoachPage> {
     if (text.isEmpty) return;
 
     setState(() {
-      _messages.add(ChatMessage(sender: MessageSender.user, text: text, time: 'Now'));
+      _messages.add(
+        ChatMessage(sender: MessageSender.user, text: text, time: 'Now'),
+      );
       _isLoading = true;
     });
     _inputController.clear();
     _scrollToBottom();
 
     try {
-      // For chat, we might want a different endpoint that returns plain text
-      // but we can reuse generateHabits if we want, or create a simple chat one.
-      // I'll assume generateHabits (Gemini) can handle it if we just want a chat response.
-      // Actually, I'll create a dedicated chat method in ApiService if needed.
-      final response = await ApiService.generateHabits(text);
-      final aiText = response['user_prompt'] ?? 'Done!'; // Fallback logic or similar
-      
-      // If the response contains suggested achievements, we handle it
-      // but for simple chat, let's just show the response text if available.
-      // Optimization: The backend generateChatResponse now returns JSON.
-      // For a plain chat, maybe it should return a 'message' field instead.
-      
+      // In a real scenario, this might call a different chat endpoint
+      // but for now we'll keep the terminology clean
+      await ApiService.getGoals(); // Placeholder or actual chat logic
+
       setState(() {
-        _messages.add(ChatMessage(sender: MessageSender.ai, text: "I've processed your request. Check your blueprints if I suggested new habits!"));
+        _messages.add(
+          const ChatMessage(
+            sender: MessageSender.ai,
+            text:
+                "I'm here to help you navigate your mission. Feel free to ask about your tasks or milestones!",
+          ),
+        );
       });
     } catch (e) {
       setState(() {
-        _messages.add(ChatMessage(sender: MessageSender.ai, text: 'Sorry, I encountered an error: $e'));
+        _messages.add(
+          ChatMessage(
+            sender: MessageSender.ai,
+            text: 'Sorry, I encountered an error: $e',
+          ),
+        );
       });
     } finally {
       setState(() => _isLoading = false);
@@ -85,21 +88,18 @@ class _AiCoachPageState extends State<AiCoachPage> {
 
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
-
     return Scaffold(
-      backgroundColor: color.backgroundColor,
+      appBar: AppBar(title: const Text('AI Coach'), centerTitle: true),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text('AI Coach', style: TextStyle(color: color.primaryTextColor, fontSize: 20, fontWeight: FontWeight.bold)),
-            ),
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
                   final msg = _messages[index];
@@ -107,7 +107,11 @@ class _AiCoachPageState extends State<AiCoachPage> {
                 },
               ),
             ),
-            if (_isLoading) const Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             _ChatInputBar(controller: _inputController, onSend: _sendMessage),
           ],
         ),
@@ -119,20 +123,38 @@ class _AiCoachPageState extends State<AiCoachPage> {
 class _MessageBubble extends StatelessWidget {
   final ChatMessage msg;
   const _MessageBubble({required this.msg});
+
   @override
   Widget build(BuildContext context) {
-    final color = AppColors();
+    final theme = Theme.of(context);
     final isAi = msg.sender == MessageSender.ai;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Align(
       alignment: isAi ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isAi ? color.cardColor : color.accentColor.withOpacity(0.8),
-          borderRadius: BorderRadius.circular(12),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.8,
         ),
-        child: Text(msg.text, style: TextStyle(color: isAi ? color.primaryTextColor : Colors.black)),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isAi
+              ? (isDark ? AppColors.darkSurface : AppColors.lightSurface)
+              : theme.colorScheme.primary,
+          borderRadius: BorderRadius.circular(16),
+          border: isAi
+              ? Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                )
+              : null,
+        ),
+        child: Text(
+          msg.text,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: isAi ? theme.colorScheme.onSurface : Colors.white,
+          ),
+        ),
       ),
     );
   }
@@ -141,17 +163,49 @@ class _MessageBubble extends StatelessWidget {
 class _ChatInputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+
   const _ChatInputBar({required this.controller, required this.onSend});
+
   @override
   Widget build(BuildContext context) {
-    final color = AppColors();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
-      padding: const EdgeInsets.all(8),
-      color: color.cardColor,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
+        ),
+      ),
       child: Row(
         children: [
-          Expanded(child: TextField(controller: controller, style: TextStyle(color: color.primaryTextColor), decoration: const InputDecoration(hintText: 'Ask me anything...', border: InputBorder.none))),
-          IconButton(icon: Icon(Icons.send, color: color.accentColor), onPressed: onSend),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: theme.textTheme.bodyMedium,
+              decoration: const InputDecoration(
+                hintText: 'Type a message...',
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                filled: false,
+              ),
+              onSubmitted: (_) => onSend(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: Icon(
+              LucideIcons.send,
+              color: theme.colorScheme.primary,
+              size: 20,
+            ),
+            onPressed: onSend,
+          ),
         ],
       ),
     );

@@ -15,8 +15,20 @@ export class UsersService {
     return user || undefined;
   }
 
+  async findById(id: string): Promise<User> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
   async create(email: string, passwordHash: string): Promise<User> {
     const user = this.usersRepository.create({ email, passwordHash });
+    return this.usersRepository.save(user);
+  }
+
+  async update(id: string, data: Partial<User>): Promise<User> {
+    const user = await this.findById(id);
+    Object.assign(user, data);
     return this.usersRepository.save(user);
   }
 }

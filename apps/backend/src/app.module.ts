@@ -1,20 +1,22 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
-import { HabitsModule } from './habits/habits.module';
-import { AiModule } from './ai/ai.module';
+import { ActionItem } from './goals/action-item.entity';
+import { Goal } from './goals/goal.entity';
+import { GoalsModule } from './goals/goals.module';
+import { Milestone } from './goals/milestone.entity';
+import { TaskStep } from './goals/task-step.entity';
 import { User } from './users/user.entity';
-import { Habit } from './habits/habit.entity';
-import { HabitCompletion } from './habits/habit-completion.entity';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: '.env.public',
+      envFilePath: ['.env'],
       isGlobal: true,
     }),
     TypeOrmModule.forRoot({
@@ -24,13 +26,13 @@ import { HabitCompletion } from './habits/habit-completion.entity';
       username: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
       database: process.env.DB_NAME || 'habit_track',
-      entities: [User, Habit, HabitCompletion],
+      entities: [User, Goal, Milestone, ActionItem, TaskStep],
       synchronize: true, // Use only in development
     }),
     UsersModule,
     AuthModule,
-    HabitsModule,
     AiModule,
+    GoalsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

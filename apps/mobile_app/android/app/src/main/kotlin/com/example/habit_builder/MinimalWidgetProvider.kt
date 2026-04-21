@@ -16,11 +16,13 @@ class MinimalWidgetProvider : HomeWidgetProvider() {
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.widget_layout_minimal).apply {
                 
-                // Read the progressPercent passed from Flutter
+                // Read data passed from Flutter
                 val progressPercent = widgetData.getInt("progressPercent", 0)
+                val nextTask = widgetData.getString("nextTask", "Mission Control")
 
                 // Set text views and progress bar
                 setTextViewText(R.id.widget_progress, "${progressPercent}%")
+                setTextViewText(R.id.widget_title, nextTask)
                 setProgressBar(R.id.widget_progress_bar, 100, progressPercent, false)
             }
             appWidgetManager.updateAppWidget(widgetId, views)

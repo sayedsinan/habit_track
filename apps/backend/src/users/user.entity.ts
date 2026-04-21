@@ -1,19 +1,34 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, OneToMany } from 'typeorm';
-import { Habit } from '../habits/habit.entity';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  OneToMany,
+} from 'typeorm';
+import { Goal } from '../goals/goal.entity';
 
 @Entity()
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   email: string;
+
+  @Column({ nullable: true })
+  firstName: string;
+
+  @Column({ nullable: true })
+  lastName: string;
+
+  @Column({ type: 'jsonb', default: { notifications: true, privacyMode: false, theme: 'dark' } })
+  settings: any;
 
   @Column()
   passwordHash: string;
 
-  @OneToMany(() => Habit, (habit) => habit.user)
-  habits: Habit[];
+  @OneToMany(() => Goal, (goal) => goal.user)
+  goals: Goal[];
 
   @CreateDateColumn()
   createdAt: Date;

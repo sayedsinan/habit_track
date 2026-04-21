@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
 import 'package:habit_builder/features/chat/chat_page.dart';
 import 'package:habit_builder/features/home/home_page.dart';
-import 'package:habit_builder/features/newHabit/new_habit.dart';
-import 'package:habit_builder/features/stats/stat_screen.dart';
 import 'package:habit_builder/features/profile/profile_page.dart';
-
-// ─────────────────────────────────────────────
-// DATA MODEL: NavItem
-// ─────────────────────────────────────────────
+import 'package:habit_builder/features/planning/timeline_page.dart';
+import 'package:habit_builder/features/planning/planning_page.dart';
 
 class NavItem {
   final IconData icon;
@@ -22,10 +20,6 @@ class NavItem {
     required this.page,
   });
 }
-
-// ─────────────────────────────────────────────
-// REUSABLE COMPONENT: MainNavBar
-// ─────────────────────────────────────────────
 
 class MainNavBar extends StatelessWidget {
   final int selectedIndex;
@@ -41,36 +35,34 @@ class MainNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       decoration: BoxDecoration(
-        color: color.navBarColor,
+        color: theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
         border: Border(
-          top: BorderSide(color: color.accentColor, width: 2),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.accentColor.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
+          top: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            width: 1,
           ),
-        ],
+        ),
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(items.length, (i) {
+              final isPlan = i == 2;
+              if (isPlan) {
+                return _PlanButton(onTap: () => onTap(i));
+              }
               return _NavBarItem(
                 item: items[i],
                 isSelected: i == selectedIndex,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  onTap(i);
-                },
+                onTap: () => onTap(i),
               );
             }),
           ),
@@ -80,9 +72,37 @@ class MainNavBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// PRIVATE COMPONENT: _NavBarItem
-// ─────────────────────────────────────────────
+class _PlanButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _PlanButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.primary.withValues(alpha: 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Icon(LucideIcons.plus, color: Colors.white, size: 24),
+      ),
+    );
+  }
+}
 
 class _NavBarItem extends StatelessWidget {
   final NavItem item;
@@ -97,43 +117,41 @@ class _NavBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    final activeColor = theme.colorScheme.primary;
+    final inactiveColor = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+    return InkWell(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedScale(
-              scale: isSelected ? 1.15 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              child: Icon(
-                item.icon,
-                size: 24,
-                color: isSelected
-                    ? color.primaryTextColor
-                    : color.subtitleColor,
-              ),
+            Icon(
+              item.icon,
+              size: 22,
+              color: isSelected ? activeColor : inactiveColor,
+            ).animate(target: isSelected ? 1 : 0).scale(
+              begin: const Offset(1, 1), 
+              end: const Offset(1.1, 1.1),
+              duration: 200.ms,
+              curve: Curves.easeOutBack,
             ),
             const SizedBox(height: 4),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: TextStyle(
-                color: isSelected
-                    ? color.primaryTextColor
-                    : color.subtitleColor,
-                fontSize: 11,
-                fontWeight:
-                    isSelected ? FontWeight.w700 : FontWeight.w400,
-                letterSpacing: 0.3,
+            Text(
+              item.label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: isSelected ? activeColor : inactiveColor,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 10,
               ),
-              child: Text(item.label),
             ),
           ],
         ),
@@ -141,10 +159,6 @@ class _NavBarItem extends StatelessWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────
-// MAIN SHELL: AppShell
-// ─────────────────────────────────────────────
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -158,15 +172,12 @@ class _AppShellState extends State<AppShell> {
 
   late final List<NavItem> _navItems;
 
-  // Maps nav index → IndexedStack index
-  // Add tab (2) is a modal — never stored in stack
-  // Stack layout: 0=Today, 1=Stats, 2=AI, 3=Profile
   int get _stackIndex {
     if (_currentIndex == 0) return 0;
     if (_currentIndex == 1) return 1;
     if (_currentIndex == 3) return 2;
     if (_currentIndex == 4) return 3;
-    return 0; // fallback
+    return 0;
   }
 
   @override
@@ -174,27 +185,27 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _navItems = const [
       NavItem(
-        icon: Icons.calendar_today_outlined,
-        label: 'Today',
+        icon: LucideIcons.layoutDashboard,
+        label: 'Dashboard',
         page: HomePage(),
       ),
       NavItem(
-        icon: Icons.bar_chart_outlined,
-        label: 'Stats',
-        page: StatScreen(),
+        icon: LucideIcons.calendar,
+        label: 'Timeline',
+        page: TimelinePage(),
       ),
       NavItem(
-        icon: Icons.add_circle_outlined,
-        label: 'Add',
-        page: NewHabitPage(),
+        icon: LucideIcons.plus,
+        label: 'Plan',
+        page: PlanningPage(),
       ),
       NavItem(
-        icon: Icons.smart_toy_outlined,
-        label: 'AI',
+        icon: LucideIcons.sparkles,
+        label: 'AI Coach',
         page: AiCoachPage(),
       ),
-      const NavItem(
-        icon: Icons.person_outline,
+      NavItem(
+        icon: LucideIcons.user,
         label: 'Profile',
         page: ProfilePage(),
       ),
@@ -203,13 +214,13 @@ class _AppShellState extends State<AppShell> {
 
   void _onNavTap(int index) {
     if (index == 2) {
-      _showAddHabitSheet();
+      _showPlanningSheet();
       return;
     }
     setState(() => _currentIndex = index);
   }
 
-  void _showAddHabitSheet() {
+  void _showPlanningSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -218,10 +229,25 @@ class _AppShellState extends State<AppShell> {
         initialChildSize: 0.92,
         minChildSize: 0.5,
         maxChildSize: 0.95,
-        builder: (_, controller) => ClipRRect(
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(20)),
-          child: const NewHabitPage(),
+        builder: (_, controller) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).dividerColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Expanded(child: PlanningPage()),
+            ],
+          ),
         ),
       ),
     );
@@ -229,17 +255,14 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final AppColors color = AppColors();
-
     return Scaffold(
-      backgroundColor: color.backgroundColor,
       body: IndexedStack(
         index: _stackIndex,
         children: [
-          _navItems[0].page, // Today  → stack index 0
-          _navItems[1].page, // Stats  → stack index 1
-          _navItems[3].page, // AI     → stack index 2
-          _navItems[4].page, // Profile→ stack index 3
+          _navItems[0].page,
+          _navItems[1].page,
+          _navItems[3].page,
+          _navItems[4].page,
         ],
       ),
       bottomNavigationBar: MainNavBar(
