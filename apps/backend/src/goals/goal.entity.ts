@@ -24,6 +24,9 @@ export class Goal {
   @Column({ type: 'text' })
   prompt: string;
 
+  @Column({ default: 'other' })
+  category: string;
+
   @Column()
   feasibility: string; // 'not possible', 'low', 'moderate', 'can be done'
 

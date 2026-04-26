@@ -16,14 +16,36 @@ import { GoalsService } from './goals.service';
 export class GoalsController {
   constructor(private readonly goalsService: GoalsService) {}
 
+  @Post('clarify')
+  async clarify(@Body() body: { prompt: string }) {
+    return this.goalsService.getClarifyingQuestions(body.prompt);
+  }
+
   @Post('evaluate')
-  async evaluate(@Request() req, @Body() body: { prompt: string; durationDays?: number }) {
-    return this.goalsService.evaluateGoal(req.user.id, body.prompt, body.durationDays);
+  async evaluate(
+    @Request() req,
+    @Body()
+    body: {
+      prompt: string;
+      durationDays?: number;
+      answers?: Record<string, string>;
+      previousPlan?: any;
+      refinementPrompt?: string;
+    },
+  ) {
+    return this.goalsService.evaluateGoal(
+      req.user.id,
+      body.prompt,
+      body.durationDays,
+      body.answers,
+      body.previousPlan,
+      body.refinementPrompt,
+    );
   }
 
   @Post()
-  async create(@Request() req, @Body() body: { prompt: string; aiPlan: any; durationDays?: number }) {
-    return this.goalsService.createGoal(req.user, body.prompt, body.aiPlan, body.durationDays);
+  async create(@Request() req, @Body() body: { prompt: string; aiPlan: any; durationDays?: number; category?: string }) {
+    return this.goalsService.createGoal(req.user, body.prompt, body.aiPlan, body.durationDays, body.category);
   }
 
   @Get()

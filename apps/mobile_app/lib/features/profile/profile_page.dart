@@ -7,6 +7,8 @@ import 'package:habit_builder/features/profile/missions_page.dart';
 import 'package:habit_builder/features/profile/settings_page.dart';
 import 'package:habit_builder/features/profile/privacy_page.dart';
 import 'package:habit_builder/features/profile/notifications_page.dart';
+import 'package:habit_builder/features/friends/friends_page.dart';
+import 'package:habit_builder/features/friends/leaderboard_page.dart';
 import 'package:habit_builder/data/app_data_store.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -178,6 +180,26 @@ class ProfilePage extends StatelessWidget {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const SettingsPage()),
+          ),
+        ),
+        _buildMenuItem(
+          context, 
+          LucideIcons.users, 
+          'Friends', 
+          subtitle: 'Manage your connections',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FriendsPage()),
+          ),
+        ),
+        _buildMenuItem(
+          context, 
+          LucideIcons.trophy, 
+          'Leaderboard', 
+          subtitle: 'View friends progress and XP',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LeaderboardPage()),
           ),
         ),
         _buildMenuItem(

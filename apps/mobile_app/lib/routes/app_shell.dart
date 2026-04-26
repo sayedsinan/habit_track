@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
-import 'package:habit_builder/features/chat/chat_page.dart';
+import 'package:habit_builder/features/friends/leaderboard_page.dart';
 import 'package:habit_builder/features/home/home_page.dart';
 import 'package:habit_builder/features/profile/profile_page.dart';
 import 'package:habit_builder/features/planning/timeline_page.dart';
@@ -200,9 +200,9 @@ class _AppShellState extends State<AppShell> {
         page: PlanningPage(),
       ),
       NavItem(
-        icon: LucideIcons.sparkles,
-        label: 'AI Coach',
-        page: AiCoachPage(),
+        icon: LucideIcons.trophy,
+        label: 'Leaderboard',
+        page: const LeaderboardPage(),
       ),
       NavItem(
         icon: LucideIcons.user,

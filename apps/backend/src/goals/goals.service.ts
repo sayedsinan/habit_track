@@ -28,20 +28,29 @@ export class GoalsService {
     private aiService: AiService,
   ) {}
 
+  async getClarifyingQuestions(prompt: string) {
+    this.logger.log(`Generating clarifying questions for prompt: ${prompt}`);
+    return this.aiService.generateClarifyingQuestions(prompt);
+  }
+
   async evaluateGoal(
     userId: string,
     prompt: string,
     durationDays: number = 90,
+    answers?: Record<string, string>,
+    previousPlan?: any,
+    refinementPrompt?: string,
   ) {
     this.logger.log(
       `Evaluating goal for user ${userId} (${durationDays} days): ${prompt.substring(0, 50)}...`,
     );
-    const aiResponse = await this.aiService.planGoal(prompt, durationDays);
+    const aiResponse = await this.aiService.planGoal(prompt, durationDays, answers, previousPlan, refinementPrompt);
 
     if (aiResponse.feasibility === 'not possible') {
       return {
         feasibility: aiResponse.feasibility,
         reason: aiResponse.feasibility_reason,
+        probability_ratio: aiResponse.probability_ratio || 0,
         plan: null,
       };
     }
@@ -54,6 +63,7 @@ export class GoalsService {
     prompt: string,
     aiPlan: any,
     durationDays: number = 90,
+    category: string = 'other',
   ) {
     if (!aiPlan || !aiPlan.plan) {
       this.logger.error(
@@ -72,6 +82,7 @@ export class GoalsService {
       title: aiPlan.plan.title,
       description: aiPlan.plan.description,
       prompt,
+      category,
       feasibility: aiPlan.feasibility || 'moderate',
       durationDays: durationDays,
       startDate: new Date(),

@@ -1,46 +1,201 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:habit_builder/core/models/goal_model.dart' as goals;
 import 'package:habit_builder/core/theme/app_colors.dart';
 import 'package:habit_builder/data/app_data_store.dart';
 import 'package:habit_builder/features/planning/planning_page.dart';
 import 'package:habit_builder/features/taskDetails/task_details_page.dart';
+import 'package:habit_builder/features/friends/leaderboard_page.dart';
+import 'package:habit_builder/features/chat/chat_page.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:confetti/confetti.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  late ConfettiController _confettiController;
+  bool _showXpAnimation = false;
+  int _xpGained = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
+  void _triggerXpAnimation(int xp) {
+    HapticFeedback.heavyImpact();
+    _confettiController.play();
+    setState(() {
+      _showXpAnimation = true;
+      _xpGained = xp;
+    });
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) {
+        setState(() {
+          _showXpAnimation = false;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListenableBuilder(
-        listenable: AppDataStore(),
-        builder: (context, child) {
-          final store = AppDataStore();
-
-          return RefreshIndicator(
-            onRefresh: store.refreshData,
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                _buildAppBar(context),
-                if (store.isLoading && store.todaysDailyTasks.isEmpty)
-                  const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (store.activeGoal == null)
-                  SliverFillRemaining(child: _buildEmptyState(context))
-                else ...[
-                  if (store.activeGoal != null) _buildGoalCard(context, store),
-                  _buildStatsGrid(context, store),
-                  _buildSectionHeader(context, "Today's Mission Tasks"),
-                  _buildTaskList(context, store),
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                ],
-              ],
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AiCoachPage()),
           );
         },
+        icon: const Icon(LucideIcons.sparkles),
+        label: const Text('AI Coach'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Stack(
+        children: [
+          ListenableBuilder(
+            listenable: AppDataStore(),
+            builder: (context, child) {
+              final store = AppDataStore();
+
+              return RefreshIndicator(
+                onRefresh: store.refreshData,
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    _buildAppBar(context),
+                    if (store.isLoading && store.todaysDailyTasks.isEmpty)
+                      const SliverFillRemaining(
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (store.activeGoal == null)
+                      SliverFillRemaining(child: _buildEmptyState(context))
+                    else ...[
+                      if (store.activeGoal != null)
+                        _buildGoalCard(context, store),
+                      _buildStatsGrid(context, store),
+                      _buildSectionHeader(context, "Today's Mission Tasks"),
+                      _buildTaskList(context, store),
+                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              shouldLoop: false,
+              colors: const [
+                Colors.green,
+                Colors.blue,
+                Colors.pink,
+                Colors.orange,
+                Colors.purple,
+              ],
+            ),
+          ),
+          if (_showXpAnimation)
+            Center(
+              child:
+                  Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).scaffoldBackgroundColor.withValues(alpha: 0.8),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.amber.withValues(alpha: 0.2),
+                              blurRadius: 50,
+                              spreadRadius: 20,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                                  LucideIcons.trophy,
+                                  size: 72,
+                                  color: Colors.amber,
+                                )
+                                .animate()
+                                .scale(
+                                  begin: const Offset(0.5, 0.5),
+                                  end: const Offset(1.2, 1.2),
+                                  duration: 400.ms,
+                                  curve: Curves.easeOutBack,
+                                )
+                                .then()
+                                .scale(
+                                  end: const Offset(1.0, 1.0),
+                                  duration: 200.ms,
+                                )
+                                .shake(hz: 2, rotation: 0.1, duration: 400.ms),
+                            const SizedBox(height: 16),
+                            TweenAnimationBuilder<int>(
+                              tween: IntTween(begin: 0, end: _xpGained),
+                              duration: const Duration(milliseconds: 1200),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, value, child) {
+                                return Text(
+                                  "+$value XP",
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .displaySmall
+                                      ?.copyWith(
+                                        color: Colors.amber,
+                                        fontWeight: FontWeight.w900,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.amber.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            blurRadius: 30,
+                                          ),
+                                        ],
+                                      ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(duration: 200.ms)
+                      .slideY(
+                        begin: 0.2,
+                        end: 0,
+                        duration: 400.ms,
+                        curve: Curves.easeOutBack,
+                      )
+                      .then(delay: 1.seconds)
+                      .fadeOut(duration: 400.ms)
+                      .slideY(begin: 0, end: -0.2),
+            ),
+        ],
       ),
     );
   }
@@ -71,7 +226,15 @@ class HomePage extends StatelessWidget {
         ],
       ),
       actions: [
-        IconButton(icon: const Icon(LucideIcons.bell), onPressed: () {}),
+        IconButton(
+          icon: Icon(LucideIcons.trophy, color: Colors.amber.shade400),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LeaderboardPage()),
+            );
+          },
+        ),
         const SizedBox(width: 8),
       ],
     );
@@ -153,18 +316,18 @@ class HomePage extends StatelessWidget {
         child: Row(
           children: [
             _StatItem(
-              label: 'Consistency',
-              value: '12',
-              unit: 'days',
-              icon: LucideIcons.flame,
-              iconColor: Colors.orange,
+              label: 'Xp Points',
+              value: store.userScore.toString(),
+              unit: 'XP',
+              icon: LucideIcons.trophy,
+              iconColor: Colors.amber,
             ),
             const SizedBox(width: 12),
             _StatItem(
-              label: 'Remaining',
-              value: '78',
-              unit: 'days',
-              icon: LucideIcons.clock,
+              label: 'Current Level',
+              value: (store.userScore ~/ 100 + 1).toString(),
+              unit: 'Rank',
+              icon: LucideIcons.medal,
               iconColor: Colors.blue,
             ),
           ],
@@ -212,7 +375,7 @@ class HomePage extends StatelessWidget {
     return SliverList(
       delegate: SliverChildBuilderDelegate((context, index) {
         final task = tasks[index];
-        return _TaskTile(task: task);
+        return _TaskTile(task: task, onCompleted: _triggerXpAnimation);
       }, childCount: tasks.length),
     );
   }
@@ -251,11 +414,9 @@ class HomePage extends StatelessWidget {
   }
 
   void _showPlanning(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const PlanningPage(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PlanningPage()),
     );
   }
 }
@@ -337,13 +498,22 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-class _TaskTile extends StatelessWidget {
+class _TaskTile extends StatefulWidget {
   final goals.ActionItem task;
+  final void Function(int xpGained)? onCompleted;
 
-  const _TaskTile({required this.task});
+  const _TaskTile({required this.task, this.onCompleted});
+
+  @override
+  State<_TaskTile> createState() => _TaskTileState();
+}
+
+class _TaskTileState extends State<_TaskTile> {
+  bool _showError = false;
 
   @override
   Widget build(BuildContext context) {
+    final task = widget.task;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -371,6 +541,29 @@ class _TaskTile extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: GestureDetector(
           onTap: () {
+            final hasSteps = task.steps.isNotEmpty;
+            final allStepsDone =
+                !hasSteps || task.steps.every((s) => s.isCompleted);
+
+            if (!allStepsDone && !isCompleted) {
+              setState(() => _showError = true);
+              Future.delayed(const Duration(milliseconds: 1000), () {
+                if (mounted) setState(() => _showError = false);
+              });
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    "Click the row to view and complete all sub-tasks first",
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+            if (!isCompleted) {
+              widget.onCompleted?.call(task.type == 'habit' ? 2 : 10);
+            }
             AppDataStore().toggleActionItem(id, isCompleted);
           },
           child: AnimatedContainer(
@@ -378,20 +571,35 @@ class _TaskTile extends StatelessWidget {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: isCompleted
-                  ? theme.colorScheme.primary
-                  : Colors.transparent,
+              color: _showError
+                  ? Colors.red
+                  : (isCompleted
+                        ? theme.colorScheme.primary
+                        : Colors.transparent),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isCompleted
-                    ? theme.colorScheme.primary
-                    : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                color: _showError
+                    ? Colors.red
+                    : (isCompleted
+                          ? theme.colorScheme.primary
+                          : (isDark
+                                ? AppColors.darkBorder
+                                : AppColors.lightBorder)),
                 width: 2,
               ),
             ),
-            child: isCompleted
-                ? const Icon(LucideIcons.check, size: 18, color: Colors.white)
-                : null,
+            child: _showError
+                ? const Icon(LucideIcons.x, size: 20, color: Colors.white)
+                      .animate()
+                      .scale(duration: 150.ms, curve: Curves.easeOutBack)
+                      .shake(hz: 3, rotation: 0.1, duration: 300.ms)
+                : (isCompleted
+                      ? const Icon(
+                          LucideIcons.check,
+                          size: 18,
+                          color: Colors.white,
+                        )
+                      : null),
           ),
         ),
         title: Text(
@@ -404,11 +612,31 @@ class _TaskTile extends StatelessWidget {
                 : null,
           ),
         ),
-        subtitle: Text(
-          subtitle,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-          ),
+        subtitle: Row(
+          children: [
+            Text(
+              subtitle,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                task.type == 'habit' ? "+2 XP" : "+10 XP",
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.amber,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 9,
+                ),
+              ),
+            ),
+          ],
         ),
         trailing: const Icon(LucideIcons.chevronRight, size: 16),
       ),

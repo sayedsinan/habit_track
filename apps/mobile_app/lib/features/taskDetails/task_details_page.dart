@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:confetti/confetti.dart';
 import 'package:habit_builder/data/app_data_store.dart';
 import 'package:habit_builder/core/models/goal_model.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
@@ -17,13 +18,23 @@ class TaskDetailsPage extends StatefulWidget {
 
 class _TaskDetailsPageState extends State<TaskDetailsPage> {
   bool _isGenerating = false;
+  late ConfettiController _confettiController;
+  bool _showXpAnimation = false;
+  int _xpGained = 0;
 
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
     if (widget.task.steps.isEmpty) {
       _generateSteps();
     }
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
   }
 
   Future<void> _generateSteps() async {
@@ -82,26 +93,93 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
         currentTask ??= widget.task;
 
         return Scaffold(
-          body: CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              _buildAppBar(context, currentTask),
-              SliverPadding(
-                padding: const EdgeInsets.all(24),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _buildHeader(context, currentTask),
-                    const SizedBox(height: 32),
-                    _buildDescription(context, currentTask),
-                    const SizedBox(height: 40),
-                    if (currentTask.type == 'habit')
-                      _buildProgressSection(context, currentTask),
-                    const SizedBox(height: 40),
-                    _buildStepsSection(context, currentTask),
-                    const SizedBox(height: 100),
-                  ]),
+          body: Stack(
+            children: [
+              CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  _buildAppBar(context, currentTask),
+                  SliverPadding(
+                    padding: const EdgeInsets.all(24),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        _buildHeader(context, currentTask),
+                        const SizedBox(height: 32),
+                        _buildDescription(context, currentTask),
+                        const SizedBox(height: 40),
+                        if (currentTask.type == 'habit')
+                          _buildProgressSection(context, currentTask),
+                        const SizedBox(height: 40),
+                        _buildStepsSection(context, currentTask),
+                        const SizedBox(height: 100),
+                      ]),
+                    ),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: Alignment.topCenter,
+                child: ConfettiWidget(
+                  confettiController: _confettiController,
+                  blastDirectionality: BlastDirectionality.explosive,
+                  shouldLoop: false,
+                  colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
                 ),
               ),
+              if (_showXpAnimation)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.8),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.amber.withValues(alpha: 0.2),
+                          blurRadius: 50,
+                          spreadRadius: 20,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.trophy, size: 72, color: Colors.amber)
+                            .animate()
+                            .scale(begin: const Offset(0.5, 0.5), end: const Offset(1.2, 1.2), duration: 400.ms, curve: Curves.easeOutBack)
+                            .then()
+                            .scale(end: const Offset(1.0, 1.0), duration: 200.ms)
+                            .shake(hz: 2, rotation: 0.1, duration: 400.ms),
+                        const SizedBox(height: 16),
+                        TweenAnimationBuilder<int>(
+                          tween: IntTween(begin: 0, end: _xpGained),
+                          duration: const Duration(milliseconds: 1200),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, value, child) {
+                            return Text(
+                              "+$value XP",
+                              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                                color: Colors.amber,
+                                fontWeight: FontWeight.w900,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.amber.withValues(alpha: 0.8),
+                                    blurRadius: 30,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        )
+                      ],
+                    ),
+                  ).animate()
+                   .fadeIn(duration: 200.ms)
+                   .slideY(begin: 0.2, end: 0, duration: 400.ms, curve: Curves.easeOutBack)
+                   .then(delay: 1.seconds)
+                   .fadeOut(duration: 400.ms)
+                   .slideY(begin: 0, end: -0.2),
+                ),
             ],
           ),
           bottomNavigationBar: _buildBottomAction(context, currentTask),
@@ -393,6 +471,18 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                     AppDataStore().toggleActionItem(task.id, task.isCompleted);
                     if (!isMainDone) {
                       HapticFeedback.heavyImpact();
+                      _confettiController.play();
+                      setState(() {
+                        _showXpAnimation = true;
+                        _xpGained = task.type == 'habit' ? 2 : 10;
+                      });
+                      Future.delayed(const Duration(milliseconds: 2500), () {
+                        if (mounted) {
+                          setState(() {
+                            _showXpAnimation = false;
+                          });
+                        }
+                      });
                     }
                   },
             style: ElevatedButton.styleFrom(

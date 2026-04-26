@@ -6,6 +6,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Goal } from '../goals/goal.entity';
+import { Friend } from '../friends/friend.entity';
 
 @Entity()
 export class User {
@@ -29,6 +30,12 @@ export class User {
 
   @OneToMany(() => Goal, (goal) => goal.user)
   goals: Goal[];
+
+  @OneToMany(() => Friend, (friend) => friend.requester)
+  sentFriendRequests: Friend[];
+
+  @OneToMany(() => Friend, (friend) => friend.recipient)
+  receivedFriendRequests: Friend[];
 
   @CreateDateColumn()
   createdAt: Date;

@@ -3,7 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:habit_builder/data/app_data_store.dart';
 import 'package:habit_builder/core/models/goal_model.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
+import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:habit_builder/features/chat/chat_page.dart';
 
 class TimelinePage extends StatelessWidget {
   const TimelinePage({super.key});
@@ -14,6 +16,18 @@ class TimelinePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Roadmap'), centerTitle: true),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AiCoachPage()),
+          );
+        },
+        icon: const Icon(LucideIcons.sparkles),
+        label: const Text('AI Coach'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+      ),
       body: ListenableBuilder(
         listenable: AppDataStore(),
         builder: (context, child) {
@@ -55,8 +69,8 @@ class TimelinePage extends StatelessWidget {
                         ),
                         _buildMiniStat(
                           context,
-                          "STATUS",
-                          goal.status.toUpperCase(),
+                          "XP",
+                          store.userScore.toString(),
                         ),
                       ],
                     ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
@@ -70,9 +84,11 @@ class TimelinePage extends StatelessWidget {
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final milestone = goal.milestones[index];
                       // Find if this is the currently active milestone
-                      final bool isCurrent = !milestone.isCompleted && 
-                          (index == 0 || goal.milestones[index - 1].isCompleted);
-                      
+                      final bool isCurrent =
+                          !milestone.isCompleted &&
+                          (index == 0 ||
+                              goal.milestones[index - 1].isCompleted);
+
                       return _buildAdvancedTimelineItem(
                         context,
                         milestone,
@@ -126,7 +142,7 @@ class TimelinePage extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     final dateStr = milestone.targetDate != null
-        ? "${milestone.targetDate!.day}/${milestone.targetDate!.month}"
+        ? DateFormat('dd MMMM yyyy').format(milestone.targetDate!)
         : "PHASE ${milestone.order}";
 
     return IntrinsicHeight(
@@ -255,7 +271,12 @@ class TimelinePage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: milestone.actionItems
-                          .map((action) => _buildActionMiniRow(context, action))
+                          .map(
+                            (action) => _ActionMiniRow(
+                              action: action,
+                              key: ValueKey(action.id),
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
@@ -286,27 +307,87 @@ class TimelinePage extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildActionMiniRow(BuildContext context, ActionItem action) {
+class _ActionMiniRow extends StatefulWidget {
+  final ActionItem action;
+
+  const _ActionMiniRow({super.key, required this.action});
+
+  @override
+  State<_ActionMiniRow> createState() => _ActionMiniRowState();
+}
+
+class _ActionMiniRowState extends State<_ActionMiniRow> {
+  bool _isGenerating = false;
+
+  Future<void> _generateSteps() async {
+    if (_isGenerating) return;
+    setState(() => _isGenerating = true);
+    try {
+      final result = await AppDataStore().generateTaskSteps(widget.action.id);
+      if (mounted) {
+        if (result == null || result.steps.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Could not generate steps. Please try again."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("AI Blueprint generated successfully!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGenerating = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasSteps = action.steps.isNotEmpty;
-    final allStepsDone = !hasSteps || action.steps.every((s) => s.isCompleted);
+    final hasSteps = widget.action.steps.isNotEmpty;
+    final allStepsDone =
+        !hasSteps || widget.action.steps.every((s) => s.isCompleted);
 
     return Theme(
       data: theme.copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
-        key: PageStorageKey(action.id), // Preserve expansion state
+        key: PageStorageKey(widget.action.id), // Preserve expansion state
         tilePadding: const EdgeInsets.symmetric(horizontal: 4),
         childrenPadding: const EdgeInsets.fromLTRB(36, 0, 4, 8),
         iconColor: theme.colorScheme.primary,
         collapsedIconColor: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-        enabled: hasSteps,
-        trailing: hasSteps ? null : const SizedBox.shrink(),
+        trailing: _isGenerating
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : null,
+        onExpansionChanged: (expanded) {
+          if (expanded && widget.action.steps.isEmpty) {
+            _generateSteps();
+          }
+        },
         title: Row(
           children: [
             GestureDetector(
               onTap: () {
-                if (!allStepsDone && !action.isCompleted) {
+                if (!allStepsDone && !widget.action.isCompleted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text("Complete all blueprint steps first"),
@@ -315,32 +396,39 @@ class TimelinePage extends StatelessWidget {
                   );
                   return;
                 }
-                AppDataStore().toggleActionItem(action.id, action.isCompleted);
+                AppDataStore().toggleActionItem(
+                  widget.action.id,
+                  widget.action.isCompleted,
+                );
               },
               child: Icon(
-                action.isCompleted ? LucideIcons.checkCircle2 : LucideIcons.circle,
+                widget.action.isCompleted
+                    ? LucideIcons.checkCircle2
+                    : LucideIcons.circle,
                 size: 18,
-                color: !allStepsDone && !action.isCompleted
+                color: !allStepsDone && !widget.action.isCompleted
                     ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
-                    : (action.isCompleted
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
+                    : (widget.action.isCompleted
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.3)),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                action.title,
+                widget.action.title,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: action.isCompleted
+                  color: widget.action.isCompleted
                       ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                       : null,
-                  decoration: action.isCompleted ? TextDecoration.lineThrough : null,
+                  decoration: widget.action.isCompleted
+                      ? TextDecoration.lineThrough
+                      : null,
                 ),
               ),
             ),
-            if (action.type == 'habit')
+            if (widget.action.type == 'habit')
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
@@ -348,9 +436,25 @@ class TimelinePage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  "${action.completedCount}/${action.totalTarget}",
+                  "${widget.action.completedCount}/${widget.action.totalTarget} (+2 XP)",
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 9,
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  "+10 XP",
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.amber,
                     fontWeight: FontWeight.bold,
                     fontSize: 9,
                   ),
@@ -358,7 +462,34 @@ class TimelinePage extends StatelessWidget {
               ),
           ],
         ),
-        children: action.steps.map((step) => _buildStepRow(context, action, step)).toList(),
+        children: _isGenerating
+            ? [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        "Generating AI Blueprint...",
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ]
+            : widget.action.steps
+                  .map((step) => _buildStepRow(context, widget.action, step))
+                  .toList(),
       ),
     );
   }
@@ -366,7 +497,8 @@ class TimelinePage extends StatelessWidget {
   Widget _buildStepRow(BuildContext context, ActionItem action, TaskStep step) {
     final theme = Theme.of(context);
     return InkWell(
-      onTap: () => AppDataStore().toggleTaskStep(action.id, step.id, step.isCompleted),
+      onTap: () =>
+          AppDataStore().toggleTaskStep(action.id, step.id, step.isCompleted),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -387,7 +519,9 @@ class TimelinePage extends StatelessWidget {
                   color: step.isCompleted
                       ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                       : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  decoration: step.isCompleted ? TextDecoration.lineThrough : null,
+                  decoration: step.isCompleted
+                      ? TextDecoration.lineThrough
+                      : null,
                 ),
               ),
             ),

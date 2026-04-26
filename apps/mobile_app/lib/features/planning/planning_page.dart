@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:habit_builder/core/api/api_service.dart';
 import 'package:habit_builder/core/theme/app_colors.dart';
+import 'package:habit_builder/data/app_data_store.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 class PlanningPage extends StatefulWidget {
@@ -12,33 +14,105 @@ class PlanningPage extends StatefulWidget {
 }
 
 class _PlanningPageState extends State<PlanningPage> {
+  int _step = 0; // 0: prompt, 1: questions, 2: preview, 3: roadmap
+
   final _promptController = TextEditingController();
+  final _refinementController = TextEditingController();
+  
   bool _isEvaluating = false;
   Map<String, dynamic>? _aiResult;
   String? _error;
+  
+  String _selectedCategory = 'productivity';
+  final List<String> _categories = ['startup', 'health', 'productivity', 'learning', 'other'];
 
-  Future<void> _evaluate() async {
+  int _selectedDuration = 90;
+
+  List<String> _questions = [];
+  final List<TextEditingController> _answerControllers = [];
+
+  Future<void> _clarify() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) return;
 
     setState(() {
       _isEvaluating = true;
       _error = null;
-      _aiResult = null;
     });
     HapticFeedback.mediumImpact();
 
     try {
-      final result = await ApiService.evaluateGoal(prompt);
+      final result = await ApiService.clarifyGoal(prompt);
+      final questions = List<String>.from(result['questions'] ?? []);
       setState(() {
-        _aiResult = result;
+        _questions = questions;
+        _answerControllers.clear();
+        for (var _ in questions) {
+          _answerControllers.add(TextEditingController());
+        }
+        _step = 1;
       });
     } catch (e) {
-      setState(() {
-        _error = "Something went wrong. High traffic maybe?";
-      });
+      setState(() => _error = "Failed to generate clarifying questions.");
     } finally {
       setState(() => _isEvaluating = false);
+    }
+  }
+
+  Future<void> _evaluate() async {
+    setState(() {
+      _isEvaluating = true;
+      _error = null;
+    });
+    HapticFeedback.mediumImpact();
+
+    final answers = <String, String>{};
+    for (int i = 0; i < _questions.length; i++) {
+      answers[_questions[i]] = _answerControllers[i].text.trim();
+    }
+
+    try {
+      final result = await ApiService.evaluateGoal(
+        _promptController.text.trim(), 
+        durationDays: _selectedDuration,
+        answers: answers,
+      );
+      setState(() {
+        _aiResult = result;
+        _step = 2;
+      });
+    } catch (e) {
+      setState(() => _error = "Something went wrong. High traffic maybe?");
+    } finally {
+      setState(() => _isEvaluating = false);
+    }
+  }
+
+  Future<Map<String, dynamic>?> _refineRoadmap(String prompt) async {
+    setState(() => _isEvaluating = true);
+    final answers = <String, String>{};
+    for (int i = 0; i < _questions.length; i++) {
+      answers[_questions[i]] = _answerControllers[i].text.trim();
+    }
+
+    try {
+      final result = await ApiService.evaluateGoal(
+        _promptController.text.trim(),
+        durationDays: _selectedDuration,
+        answers: answers,
+        previousPlan: _aiResult,
+        refinementPrompt: prompt,
+      );
+      return result;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to refine roadmap.")),
+        );
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _isEvaluating = false);
     }
   }
 
@@ -47,7 +121,13 @@ class _PlanningPageState extends State<PlanningPage> {
 
     setState(() => _isEvaluating = true);
     try {
-      await ApiService.createGoal(_promptController.text.trim(), _aiResult!);
+      await ApiService.createGoal(
+        _promptController.text.trim(),
+        _aiResult!,
+        durationDays: _selectedDuration,
+        category: _selectedCategory,
+      );
+      await AppDataStore().refreshData();
       if (mounted) {
         Navigator.pop(context, true);
       }
@@ -59,157 +139,874 @@ class _PlanningPageState extends State<PlanningPage> {
   }
 
   @override
+  void dispose() {
+    _promptController.dispose();
+    _refinementController.dispose();
+    for (var c in _answerControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+    Widget bodyContent;
+    if (_step == 0) {
+      bodyContent = _buildInputState(context, theme, isDark);
+    } else if (_step == 1) {
+      bodyContent = _buildQuestionsView(context, theme, isDark);
+    } else if (_step == 2) {
+      bodyContent = _buildFeasibilityView(context, theme, isDark);
+    } else {
+      bodyContent = _buildRoadmapPreviewView(context, theme, isDark);
+    }
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(LucideIcons.arrowLeft),
+          onPressed: () {
+            if (_step > 0) {
+              setState(() => _step--);
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28.0),
+          child: bodyContent,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputState(BuildContext context, ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Icon(LucideIcons.rocket, color: theme.colorScheme.primary, size: 28),
+        ).animate().scale(curve: Curves.elasticOut, duration: 800.ms),
+        
+        const SizedBox(height: 32),
+        
+        Text(
+          "Define your\nvision.",
+          style: theme.textTheme.displayLarge?.copyWith(fontSize: 40),
+        ).animate().fade().slideY(begin: 0.1),
+        
+        const SizedBox(height: 16),
+        
+        Text(
+          "Describe what you want to achieve, and our Architect AI will construct a tailored roadmap.",
+          style: theme.textTheme.bodyMedium,
+        ).animate().fade(delay: 200.ms).slideY(begin: 0.1),
+
+        const SizedBox(height: 48),
+
+        Container(
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: TextField(
+            controller: _promptController,
+            style: theme.textTheme.bodyLarge?.copyWith(height: 1.4),
+            maxLines: 4,
+            decoration: InputDecoration(
+              hintText: "e.g., I want to master high-performance engineering...",
+              hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              border: InputBorder.none,
+            ),
+          ),
+        ).animate().fade(delay: 400.ms).slideX(begin: 0.05),
+
+        const SizedBox(height: 32),
+
+        _buildSectionTitle(context, "MISSION TYPE"),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _categories.map((cat) {
+              final isSelected = _selectedCategory == cat;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedCategory = cat);
+                  },
+                  child: AnimatedContainer(
+                    duration: 200.ms,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? theme.colorScheme.primary : theme.cardTheme.color,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? theme.colorScheme.primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                      ),
+                    ),
+                    child: Text(
+                      cat.toUpperCase(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isSelected ? Colors.white : theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ).animate().fade(delay: 500.ms).slideX(begin: 0.1),
+
+        const SizedBox(height: 32),
+
+        _buildSectionTitle(context, "TIMELINE"),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [30, 90, 180, 365].map((days) {
+              final isSelected = _selectedDuration == days;
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedDuration = days);
+                  },
+                  child: AnimatedContainer(
+                    duration: 200.ms,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: isSelected ? theme.colorScheme.primary : theme.cardTheme.color,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? theme.colorScheme.primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                      ),
+                    ),
+                    child: Text(
+                      "$days Days",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isSelected ? Colors.white : theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ).animate().fade(delay: 600.ms).slideX(begin: 0.1),
+
+        const SizedBox(height: 48),
+
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        
+        ElevatedButton(
+          onPressed: _isEvaluating ? null : _clarify,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 64),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: _isEvaluating
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text("Continue"),
+                    SizedBox(width: 8),
+                    Icon(LucideIcons.arrowRight, size: 20),
+                  ],
+                ),
+        ).animate().fade(delay: 800.ms).scaleY(begin: 0.8),
+        
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildQuestionsView(BuildContext context, ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Text(
+          "Let's refine.",
+          style: theme.textTheme.displayLarge?.copyWith(fontSize: 40),
+        ).animate().fade().slideY(begin: 0.1),
+        const SizedBox(height: 16),
+        Text(
+          "Answer a few quick questions so we can generate the perfect roadmap for you.",
+          style: theme.textTheme.bodyMedium,
+        ).animate().fade(delay: 200.ms).slideY(begin: 0.1),
+
+        const SizedBox(height: 32),
+
+        ...List.generate(_questions.length, (index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _questions[index],
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.cardTheme.color,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: TextField(
+                    controller: _answerControllers[index],
+                    style: theme.textTheme.bodyLarge,
+                    decoration: InputDecoration(
+                      hintText: "Your answer...",
+                      hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                      ),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+              ],
+            ).animate().fade(delay: Duration(milliseconds: 300 + (index * 100))).slideX(begin: 0.05),
+          );
+        }),
+
+        const SizedBox(height: 24),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ),
+
+        ElevatedButton(
+          onPressed: _isEvaluating ? null : _evaluate,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 64),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: _isEvaluating
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text("Analyze with AI"),
+                    SizedBox(width: 8),
+                    Icon(LucideIcons.sparkles, size: 20),
+                  ],
+                ),
+        ).animate().fade(delay: 800.ms).scaleY(begin: 0.8),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildFeasibilityView(BuildContext context, ThemeData theme, bool isDark) {
+    final result = _aiResult!;
+    final feasibility = result['feasibility'] ?? 'moderate';
+    final reason = result['feasibility_reason'] ?? "";
+    final analysis = result['strategic_analysis'] ?? "";
+    final challenges = List<String>.from(result['key_challenges'] ?? []);
+    final graphData = List<Map<String, dynamic>>.from(result['graph_data'] ?? []);
+    final isPossible = feasibility != 'not possible';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Text(
+          "Strategic\nAnalysis",
+          style: theme.textTheme.displayLarge?.copyWith(fontSize: 40),
+        ).animate().fade().slideY(begin: 0.1),
+        const SizedBox(height: 32),
+
+        _buildStatusBadge(context, feasibility).animate().fade(delay: 200.ms),
+        const SizedBox(height: 16),
+        Text(reason, style: theme.textTheme.bodyLarge?.copyWith(height: 1.5)).animate().fade(delay: 300.ms),
+        
+        const SizedBox(height: 24),
+        _buildProbabilityChart(context, theme, (result['probability_ratio'] ?? 75).toDouble()).animate().fade(delay: 350.ms),
+
+        const SizedBox(height: 40),
+        if (analysis.isNotEmpty) ...[
+          _buildSectionTitle(context, "Strategic Approach").animate().fade(delay: 400.ms),
+          const SizedBox(height: 16),
+          Text(
+            analysis,
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.6, color: theme.colorScheme.onSurface.withValues(alpha: 0.8)),
+          ).animate().fade(delay: 500.ms),
+          const SizedBox(height: 40),
+        ],
+
+        if (graphData.isNotEmpty) ...[
+          _buildSectionTitle(context, "Requirements Graph").animate().fade(delay: 550.ms),
+          const SizedBox(height: 16),
+          _buildBarChart(context, theme, graphData).animate().fade(delay: 600.ms).slideY(begin: 0.1),
+          const SizedBox(height: 40),
+        ],
+
+        if (challenges.isNotEmpty) ...[
+          _buildSectionTitle(context, "Key Challenges").animate().fade(delay: 600.ms),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: challenges.map((c) => _buildChip(context, c)).toList(),
+          ).animate().fade(delay: 700.ms),
+          const SizedBox(height: 48),
+        ],
+
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ),
+
+        if (isPossible)
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _step = 3);
+            },
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 64),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Text("View Proposed Roadmap"),
+                SizedBox(width: 8),
+                Icon(LucideIcons.arrowRight, size: 20),
+              ],
+            ),
+          ).animate().fade(delay: 800.ms).scaleY(begin: 0.8)
+        else
+          TextButton(
+            onPressed: () => setState(() => _step = 0),
+            child: const Text("Try another mission prompt"),
+          ).animate().fade(delay: 800.ms),
+          
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildRoadmapPreviewView(BuildContext context, ThemeData theme, bool isDark) {
+    final plan = _aiResult!['plan'];
+    final milestones = plan != null ? List<dynamic>.from(plan['milestones'] ?? []) : [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Text(
+          "Roadmap\nPreview",
+          style: theme.textTheme.displayLarge?.copyWith(fontSize: 40),
+        ).animate().fade().slideY(begin: 0.1),
+        const SizedBox(height: 32),
+
+        ...List.generate(milestones.length, (index) {
+          final milestone = milestones[index];
+          return _buildTimelineItem(context, milestone, index, index == milestones.length - 1);
+        }),
+
+        const SizedBox(height: 32),
+        
+        _buildSectionTitle(context, "Refine Plan").animate().fade(delay: 600.ms),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: theme.cardTheme.color,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _refinementController,
+                  decoration: InputDecoration(
+                    hintText: "Change anything? (e.g. Make it harder)",
+                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                    ),
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: _isEvaluating 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : Icon(LucideIcons.refreshCw, color: theme.colorScheme.primary),
+                onPressed: _isEvaluating ? null : () async {
+                  final prompt = _refinementController.text.trim();
+                  if (prompt.isEmpty) return;
+                  final newResult = await _refineRoadmap(prompt);
+                  if (newResult != null && mounted) {
+                    setState(() {
+                      _aiResult = newResult;
+                      _refinementController.clear();
+                    });
+                  }
+                },
+              )
+            ],
+          ),
+        ).animate().fade(delay: 650.ms),
+        const SizedBox(height: 24),
+
+        ElevatedButton(
+          onPressed: _isEvaluating ? null : _startPlan,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 64),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: _isEvaluating
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text("Initialize Roadmap"),
+                    SizedBox(width: 8),
+                    Icon(LucideIcons.check, size: 20),
+                  ],
+                ),
+        ).animate().fade(delay: 800.ms).scaleY(begin: 0.8),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildTimelineItem(BuildContext context, Map<String, dynamic> milestone, int index, bool isLast) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final order = milestone['weeks_from_start'] ?? (index + 1);
+    final isCurrent = index == 0; 
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(context),
+          Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isCurrent
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isCurrent
+                        ? theme.colorScheme.primary
+                        : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    order.toString(),
+                    style: TextStyle(
+                      color: isCurrent
+                          ? Colors.white
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 20),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 40),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_aiResult == null) ...[
-                    _buildInputState(context),
-                  ] else ...[
-                    _buildFeasibilityView(context),
-                  ],
-                  if (_error != null) _buildError(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "PHASE $order",
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: isCurrent
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      if (isCurrent) _buildCurrentBadge(context),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    milestone['title'] ?? 'Milestone',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    milestone['description'] ?? '',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (milestone['action_items'] != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.cardTheme.color,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: (milestone['action_items'] as List<dynamic>).map((action) {
+                          return _buildActionMiniRow(context, action);
+                        }).toList(),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
         ],
       ),
+    ).animate().fadeIn(duration: 600.ms, delay: (index * 150).ms).slideX(begin: 0.05);
+  }
+
+  Widget _buildCurrentBadge(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        "PREVIEW",
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildActionMiniRow(BuildContext context, dynamic action) {
     final theme = Theme.of(context);
+    final type = action['type'] ?? 'task';
+    final target = action['total_target'] ?? 1;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Icon(
+            LucideIcons.circle,
+            size: 18,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              action['title'] ?? 'Action',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (type == 'habit')
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                "0/$target (+2 XP)",
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 9,
+                ),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                "+10 XP",
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.amber,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 9,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProbabilityChart(BuildContext context, ThemeData theme, double probability) {
+    final color = probability >= 75
+        ? Colors.greenAccent
+        : (probability >= 50 ? Colors.orangeAccent : Colors.redAccent);
+
+    String label;
+    String description;
+    if (probability >= 80) {
+      label = "OPTIMAL";
+      description = "The metrics are excellent. Your consistency and target duration indicate a high success rate.";
+    } else if (probability >= 60) {
+      label = "GOOD";
+      description = "A strong roadmap. Success is highly likely with disciplined execution of daily quests.";
+    } else if (probability >= 40) {
+      label = "MODERATE";
+      description = "Feasible, but demands strict alignment. You will need to build heavy friction blockers.";
+    } else {
+      label = "RISKY";
+      description = "High operational hazard. This timeline is extremely tight for the scale of this quest.";
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: theme.brightness == Brightness.dark 
+              ? AppColors.darkBorder.withValues(alpha: 0.5) 
+              : AppColors.lightBorder.withValues(alpha: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.08),
+            blurRadius: 40,
+            spreadRadius: -10,
+          ),
+        ],
+      ),
+      child: Column(
         children: [
           Text(
-            _aiResult == null ? 'New Mission' : 'Strategic Analysis',
-            style: theme.textTheme.titleLarge,
+            "CHANCE OF SUCCESS",
+            style: theme.textTheme.labelSmall?.copyWith(
+              letterSpacing: 2.0,
+              fontWeight: FontWeight.w900,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
           ),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(LucideIcons.x, size: 20),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: 140,
+            height: 140,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.25),
+                        blurRadius: 30,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                CustomPaint(
+                  size: const Size(140, 140),
+                  painter: _GradientCircularProgressPainter(
+                    probability: probability,
+                    baseColor: color,
+                    trackColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "${probability.toInt()}%",
+                      style: theme.textTheme.displayMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 34,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              description,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                height: 1.5,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInputState(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget _buildBarChart(BuildContext context, ThemeData theme, List<Map<String, dynamic>> data) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "What do you want to achieve in the next 90 days?",
-          style: theme.textTheme.bodyLarge,
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _promptController,
-          maxLines: 5,
-          decoration: InputDecoration(
-            hintText:
-                "e.g., Build a successful habit tracking app using Flutter and AI...",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isEvaluating ? null : _evaluate,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            child: _isEvaluating
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text("Analyze with AI"),
-          ),
-        ),
-      ],
-    );
-  }
+      children: data.map((item) {
+        final label = item['label'] ?? '';
+        final value = (item['value'] ?? 0).toDouble();
+        final fraction = (value / 100).clamp(0.0, 1.0);
 
-  Widget _buildFeasibilityView(BuildContext context) {
-    final theme = Theme.of(context);
-    final result = _aiResult!;
-    final feasibility = result['feasibility'] ?? 'moderate';
-    final reason = result['feasibility_reason'] ?? "";
-    final analysis = result['strategic_analysis'] ?? "";
-    final challenges = List<String>.from(result['key_challenges'] ?? []);
-    final isPossible = feasibility != 'not possible';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStatusBadge(context, feasibility),
-        const SizedBox(height: 12),
-        Text(reason, style: theme.textTheme.bodyMedium?.copyWith(height: 1.5)),
-        const SizedBox(height: 32),
-        if (analysis.isNotEmpty) ...[
-          _buildSectionTitle(context, "Strategic Approach"),
-          const SizedBox(height: 12),
-          Text(
-            analysis,
-            style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-          ),
-          const SizedBox(height: 32),
-        ],
-        if (challenges.isNotEmpty) ...[
-          _buildSectionTitle(context, "Key Challenges"),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: challenges.map((c) => _buildChip(context, c)).toList(),
-          ),
-          const SizedBox(height: 32),
-        ],
-        if (isPossible)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isEvaluating ? null : _startPlan,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: Colors.white,
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(label, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  Text("${value.toInt()}%", style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+                ],
               ),
-              child: _isEvaluating
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Initialize Roadmap"),
-            ),
-          )
-        else
-          TextButton(
-            onPressed: () => setState(() => _aiResult = null),
-            child: const Text("Try another mission prompt"),
+              const SizedBox(height: 6),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return Container(
+                    height: 8,
+                    width: constraints.maxWidth,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: 1.seconds,
+                          curve: Curves.easeOutCubic,
+                          height: 8,
+                          width: constraints.maxWidth * fraction,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              ),
+            ],
           ),
-        const SizedBox(height: 40),
-      ],
+        );
+      }).toList(),
     );
   }
 
@@ -228,18 +1025,18 @@ class _PlanningPageState extends State<PlanningPage> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 2),
       ),
       child: Text(
         feasibility.toUpperCase(),
         style: theme.textTheme.labelSmall?.copyWith(
           color: color,
           fontWeight: FontWeight.w900,
-          letterSpacing: 0.5,
+          letterSpacing: 1.0,
         ),
       ),
     );
@@ -261,26 +1058,71 @@ class _PlanningPageState extends State<PlanningPage> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: BorderRadius.circular(8),
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
         ),
       ),
-      child: Text(text, style: theme.textTheme.bodySmall),
-    );
-  }
-
-  Widget _buildError() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
       child: Text(
-        _error!,
-        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-        textAlign: TextAlign.center,
+        text, 
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w500,
+        )
       ),
     );
+  }
+}
+
+class _GradientCircularProgressPainter extends CustomPainter {
+  final double probability;
+  final Color baseColor;
+  final Color trackColor;
+
+  _GradientCircularProgressPainter({
+    required this.probability,
+    required this.baseColor,
+    required this.trackColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width < size.height ? size.width / 2 : size.height / 2) - 6;
+
+    // Draw background track
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 12;
+    canvas.drawCircle(center, radius, trackPaint);
+
+    // Draw progress arc
+    if (probability > 0) {
+      final rect = Rect.fromCircle(center: center, radius: radius);
+      const startAngle = -3.1415926535 / 2;
+      final sweepAngle = 2 * 3.1415926535 * (probability / 100);
+
+      final progressPaint = Paint()
+        ..shader = SweepGradient(
+          startAngle: -3.1415926535 / 2,
+          endAngle: 3 * 3.1415926535 / 2,
+          colors: [baseColor.withValues(alpha: 0.2), baseColor],
+        ).createShader(rect)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawArc(rect, startAngle, sweepAngle, false, progressPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GradientCircularProgressPainter oldDelegate) {
+    return oldDelegate.probability != probability ||
+        oldDelegate.baseColor != baseColor ||
+        oldDelegate.trackColor != trackColor;
   }
 }

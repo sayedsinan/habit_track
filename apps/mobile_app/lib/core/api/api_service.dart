@@ -133,8 +133,9 @@ class ApiService {
       headers: _headers,
       body: jsonEncode({'date': date}),
     );
-    if (res.statusCode == 201 || res.statusCode == 200)
+    if (res.statusCode == 201 || res.statusCode == 200) {
       return jsonDecode(res.body);
+    }
     throw Exception('Failed to toggle habit');
   }
 
@@ -150,10 +151,24 @@ class ApiService {
     throw Exception('Failed to communicate with AI');
   }
 
-  // Goals API
+  static Future<Map<String, dynamic>> clarifyGoal(String prompt) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/goals/clarify'),
+      headers: _headers,
+      body: jsonEncode({'prompt': prompt}),
+    );
+    if (res.statusCode == 201 || res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception('Failed to clarify goal');
+  }
+
   static Future<Map<String, dynamic>> evaluateGoal(
     String prompt, {
     int? durationDays,
+    Map<String, String>? answers,
+    Map<String, dynamic>? previousPlan,
+    String? refinementPrompt,
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/goals/evaluate'),
@@ -161,10 +176,14 @@ class ApiService {
       body: jsonEncode({
         'prompt': prompt,
         if (durationDays != null) 'durationDays': durationDays,
+        if (answers != null) 'answers': answers,
+        if (previousPlan != null) 'previousPlan': previousPlan,
+        if (refinementPrompt != null) 'refinementPrompt': refinementPrompt,
       }),
     );
-    if (res.statusCode == 201 || res.statusCode == 200)
+    if (res.statusCode == 201 || res.statusCode == 200) {
       return jsonDecode(res.body);
+    }
     throw Exception('Failed to evaluate goal');
   }
 
@@ -172,6 +191,7 @@ class ApiService {
     String prompt,
     Map<String, dynamic> aiPlan, {
     int? durationDays,
+    String? category,
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/goals'),
@@ -179,11 +199,13 @@ class ApiService {
       body: jsonEncode({
         'prompt': prompt,
         'aiPlan': aiPlan,
-        if (durationDays != null) 'durationDays': durationDays,
+        'durationDays': (durationDays != null) ? durationDays : null,
+        'category': (category != null) ? category : null,
       }),
     );
-    if (res.statusCode == 201 || res.statusCode == 200)
+    if (res.statusCode == 201 || res.statusCode == 200) {
       return jsonDecode(res.body);
+    }
     throw Exception('Failed to create goal');
   }
 
@@ -259,5 +281,64 @@ class ApiService {
     );
     if (res.statusCode == 200) return jsonDecode(res.body);
     throw Exception('Failed to update profile');
+  }
+
+  // Friends & Leaderboard API
+  static Future<void> sendFriendRequest(String email) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/friends/request'),
+      headers: _headers,
+      body: jsonEncode({'email': email}),
+    );
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception('Failed to send friend request');
+    }
+  }
+
+  static Future<void> acceptFriendRequest(String requestId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/friends/accept/$requestId'),
+      headers: _headers,
+    );
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception('Failed to accept request');
+    }
+  }
+
+  static Future<void> rejectFriendRequest(String requestId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/friends/reject/$requestId'),
+      headers: _headers,
+    );
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception('Failed to reject request');
+    }
+  }
+
+  static Future<List<dynamic>> getFriends() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/friends'),
+      headers: _headers,
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to load friends');
+  }
+
+  static Future<List<dynamic>> getPendingRequests() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/friends/requests'),
+      headers: _headers,
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to load friend requests');
+  }
+
+  static Future<List<dynamic>> getLeaderboard() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/friends/leaderboard'),
+      headers: _headers,
+    );
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to load leaderboard');
   }
 }

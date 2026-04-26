@@ -227,6 +227,20 @@ class AppDataStore extends ChangeNotifier {
     return totalItems == 0 ? 0.0 : completedItems / totalItems;
   }
 
+  int get userScore {
+    int score = 0;
+    for (var g in currentGoals) {
+      if (g.status == 'completed') score += 50; // Bonus for completed goal
+      for (var m in g.milestones) {
+        for (var a in m.actionItems) {
+          if (a.isCompleted) score += 10;
+          if (a.type == 'habit') score += (a.completedCount * 2);
+        }
+      }
+    }
+    return score;
+  }
+
   void _updateNativeWidget() async {
     final active = activeGoal;
     if (active == null) return;
